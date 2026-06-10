@@ -116,11 +116,11 @@ func WithSnapshot(snapshotFilePath string) testcontainers.CustomizeRequestOption
 }
 
 // WithMainRemoteArtifact provides urls of remote artifacts that will be imported as primary or main ones within the Microcks container.
-func WithMainRemoteArtifact(remoteArtifactUrl string) testcontainers.CustomizeRequestOption {
+func WithMainRemoteArtifact(remoteArtifactUrl string, secretName ...string) testcontainers.CustomizeRequestOption {
 	return func(req *testcontainers.GenericContainerRequest) error {
 		hooks := testcontainers.ContainerLifecycleHooks{
 			PostReadies: []testcontainers.ContainerHook{
-				downloadArtifactHook(remoteArtifactUrl, true),
+				downloadArtifactHook(remoteArtifactUrl, true, secretName...),
 			},
 		}
 		req.LifecycleHooks = append(req.LifecycleHooks, hooks)
@@ -129,11 +129,11 @@ func WithMainRemoteArtifact(remoteArtifactUrl string) testcontainers.CustomizeRe
 }
 
 // WithSecondaryRemoteArtifact provides urls of remote artifacts that will be imported as secondary ones within the Microcks container.
-func WithSecondaryRemoteArtifact(remoteArtifactUrl string) testcontainers.CustomizeRequestOption {
+func WithSecondaryRemoteArtifact(remoteArtifactUrl string, secretName ...string) testcontainers.CustomizeRequestOption {
 	return func(req *testcontainers.GenericContainerRequest) error {
 		hooks := testcontainers.ContainerLifecycleHooks{
 			PostReadies: []testcontainers.ContainerHook{
-				downloadArtifactHook(remoteArtifactUrl, false),
+				downloadArtifactHook(remoteArtifactUrl, false, secretName...),
 			},
 		}
 		req.LifecycleHooks = append(req.LifecycleHooks, hooks)
@@ -335,13 +335,13 @@ func (container *MicrocksContainer) ImportSnapshot(ctx context.Context, snapshot
 }
 
 // DownloadAsMainArtifact downloads a remote artifact as a primary or main one within the Microcks container.
-func (container *MicrocksContainer) DownloadAsMainArtifact(ctx context.Context, remoteArtifactUrl string) (int, error) {
-	return container.downloadArtifact(ctx, remoteArtifactUrl, true)
+func (container *MicrocksContainer) DownloadAsMainArtifact(ctx context.Context, remoteArtifactUrl string, secretName ...string) (int, error) {
+	return container.downloadArtifact(ctx, remoteArtifactUrl, true, secretName...)
 }
 
 // DownloadAsSecondaryArtifact downloads a remote artifact as a secondary one within the Microcks container.
-func (container *MicrocksContainer) DownloadAsSecondaryArtifact(ctx context.Context, remoteArtifactUrl string) (int, error) {
-	return container.downloadArtifact(ctx, remoteArtifactUrl, false)
+func (container *MicrocksContainer) DownloadAsSecondaryArtifact(ctx context.Context, remoteArtifactUrl string, secretName ...string) (int, error) {
+	return container.downloadArtifact(ctx, remoteArtifactUrl, false, secretName...)
 }
 
 // TestEndpoint launches a conformance test on an endpoint.
@@ -618,15 +618,15 @@ func (container *MicrocksContainer) importSnapshot(ctx context.Context, snapshot
 	return response.StatusCode, nil
 }
 
-func downloadArtifactHook(remoteArtifactUrl string, mainArtifact bool) testcontainers.ContainerHook {
+func downloadArtifactHook(remoteArtifactUrl string, mainArtifact bool, secretName ...string) testcontainers.ContainerHook {
 	return func(ctx context.Context, container testcontainers.Container) error {
 		microcksContainer := &MicrocksContainer{Container: container}
-		_, err := microcksContainer.downloadArtifact(ctx, remoteArtifactUrl, mainArtifact)
+		_, err := microcksContainer.downloadArtifact(ctx, remoteArtifactUrl, mainArtifact, secretName...)
 		return err
 	}
 }
 
-func (container *MicrocksContainer) downloadArtifact(ctx context.Context, remoteArtifactUrl string, mainArtifact bool) (int, error) {
+func (container *MicrocksContainer) downloadArtifact(ctx context.Context, remoteArtifactUrl string, mainArtifact bool, secretName ...string) (int, error) {
 	// Retrieve API endpoint.
 	httpEndpoint, err := container.HttpEndpoint(ctx)
 	if err != nil {
@@ -636,6 +636,9 @@ func (container *MicrocksContainer) downloadArtifact(ctx context.Context, remote
 	data := url.Values{}
 	data.Set("url", remoteArtifactUrl)
 	data.Set("mainArtifact", strconv.FormatBool(mainArtifact))
+	if len(secretName) > 0 && len(secretName[0]) > 0 {
+		data.Set("secretName", secretName[0])
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, httpEndpoint+"/api/artifact/download", strings.NewReader(data.Encode()))
 	if err != nil {
